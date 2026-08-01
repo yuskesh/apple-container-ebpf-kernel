@@ -4,17 +4,26 @@
 # Verify the currently installed kernel has the eBPF feature set. Run on the
 # macOS host; it spawns a throwaway container on the active kernel.
 #
+# Needs Apple `container` >= 1.2.0: the bpf LSM is activated per run with
+# --kernel-arg (apple/container#1744). On older releases the flag does not exist
+# and this script fails to start the probe container.
+#
 # Tunables:
 #   IMAGE   container image to probe with (default debian:trixie)
 set -euo pipefail
 
 IMAGE="${IMAGE:-docker.io/library/debian:trixie}"
 
+# The full runtime default lsm= list plus bpf; a user-supplied lsm= replaces the
+# default verbatim, so listing only bpf would drop landlock/yama/apparmor.
+LSM_ARG="lsm=lockdown,capability,landlock,yama,apparmor,bpf"
+
 # SYS_ADMIN is needed for one thing only: mounting securityfs, without which the
 # active LSM list is unreadable and the `bpf` LSM cannot be verified at all.
-container run --rm --cap-add SYS_ADMIN "$IMAGE" sh -c '
+container run --rm --cap-add SYS_ADMIN --kernel-arg "$LSM_ARG" "$IMAGE" sh -c '
   set -e
   echo "uname:     $(uname -r)"
+  echo "cmdline:   $(cat /proc/cmdline)"
 
   if [ -s /sys/kernel/btf/vmlinux ]; then
     echo "BTF:       present ($(wc -c </sys/kernel/btf/vmlinux) bytes)"
@@ -38,10 +47,10 @@ container run --rm --cap-add SYS_ADMIN "$IMAGE" sh -c '
     echo "bpffs:      MISSING"
   fi
 
-  # The active LSM list; shows "bpf" only if the forced cmdline took effect. The
-  # runtime does not mount securityfs, so mount it here or the list is invisible.
-  # The list contains only LSMs actually built in, so it is a subset of the lsm=
-  # on the command line -- `bpf` being present is what matters.
+  # The active LSM list; shows "bpf" only if the --kernel-arg lsm= override took
+  # effect. The runtime does not mount securityfs, so mount it here or the list
+  # is invisible. The list contains only LSMs actually built in, so it is a
+  # subset of the lsm= on the command line -- `bpf` being present is what matters.
   mount -t securityfs securityfs /sys/kernel/security 2>/dev/null || true
   echo "lsm:       $(cat /sys/kernel/security/lsm 2>/dev/null || echo "(securityfs unavailable; needs CAP_SYS_ADMIN)")"
 

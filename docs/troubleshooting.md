@@ -34,58 +34,53 @@ Two separate causes:
 
 - **`bpf` isn't in the active `lsm=` list.** The VM runtime passes its own `lsm=`
   on the kernel command line, which overrides `CONFIG_LSM` and does not include
-  `bpf` by default. On arm64 there is no `CMDLINE_EXTEND` (only
-  `FROM_BOOTLOADER` or `FORCE`), so the only way to add `bpf` is to **force the
-  entire command line** with `,bpf` appended to `lsm=`. The overlay does this via
-  `CONFIG_CMDLINE_FORCE=y` + `CONFIG_CMDLINE="…"`.
+  `bpf`. Since Apple `container` 1.2.0
+  ([apple/container#1744](https://github.com/apple/container/pull/1744)) that
+  default can be replaced **per run**:
+
+  ```sh
+  container run --kernel-arg lsm=lockdown,capability,landlock,yama,apparmor,bpf …
+  ```
+
+  Pass the full list — a user-supplied `lsm=` replaces the default verbatim, so
+  naming only `bpf` would silently drop `landlock`/`yama`/`apparmor`. The flag
+  must be on **every** run that uses `SEC("lsm/…")`; without it the container
+  boots fine and LSM programs attach but never fire (`setup-bpf-env.sh` warns
+  when it detects this). On `container` <= 1.1.x the flag does not exist; arm64
+  has no `CMDLINE_EXTEND`, so the only option there was baking the entire
+  command line into the image with `CONFIG_CMDLINE_FORCE` (what this repo did
+  before the 1.2 bump — see the repo history), at the price that a stale forced
+  string prevents the guest from booting.
 - **No `fmod_ret`-able targets.** `fmod_ret` needs
   `CONFIG_FUNCTION_ERROR_INJECTION=y` (plus `CONFIG_BPF_KPROBE_OVERRIDE=y`) for
-  there to be any attachable functions.
+  there to be any attachable functions. `fmod_ret` does **not** need `bpf` in
+  the `lsm=` list — only `SEC("lsm/…")` does.
 
 Confirm it worked: `/sys/kernel/security/lsm` should list `bpf`. The runtime does
 not mount securityfs, so that file does not exist until you mount it yourself —
 which needs `CAP_SYS_ADMIN`:
 
 ```sh
-container run --rm --cap-add SYS_ADMIN docker.io/library/debian:trixie sh -c \
+container run --rm --cap-add SYS_ADMIN \
+  --kernel-arg lsm=lockdown,capability,landlock,yama,apparmor,bpf \
+  docker.io/library/debian:trixie sh -c \
   'mount -t securityfs securityfs /sys/kernel/security && cat /sys/kernel/security/lsm'
 # -> capability,landlock,bpf
 ```
 
 `verify-kernel.sh` does this for you. Note the list only ever contains LSMs that
-are actually built in, so it is a subset of the `lsm=` you forced on the command
-line — `bpf` being there is the thing to check, not an exact match.
+are actually built in, so it is a subset of the `lsm=` on the command line —
+`bpf` being there is the thing to check, not an exact match.
 
-### Forcing the command line can brick the boot
+### `--kernel-arg` seems to have no effect
 
-`CONFIG_CMDLINE_FORCE` bakes a fixed command line into the image. If it doesn't
-match what the runtime expects (wrong `init=`, `root=`, `console=`, …), the guest
-won't boot. Before building:
-
-```sh
-container exec <some-running-container> cat /proc/cmdline
-```
-
-Copy that string verbatim into `CONFIG_CMDLINE`, changing only `lsm=` to append
-`,bpf`. If a runtime upgrade later changes the command line, rebuild with the new
-one. If you don't need the BPF LSM at all, delete the two `CMDLINE` lines from the
-overlay and avoid the risk entirely.
-
-**Do not read `/proc/cmdline` back from the forced kernel to check this.** Once
-`CONFIG_CMDLINE_FORCE` is in effect the kernel ignores what the runtime passed and
-reports `CONFIG_CMDLINE` verbatim, so the check becomes circular: it will happily
-echo a string that no longer matches the runtime. Read it *before* switching (the
-stock kernel does not force anything), or point the runtime at a non-forcing
-kernel first:
-
-```sh
-container system kernel set --binary <stock-or-kata-kernel> --arch arm64 --force
-container system stop && container system start --disable-kernel-install
-container run --rm docker.io/library/debian:trixie cat /proc/cmdline   # the real one
-```
-
-then put your own kernel back the same way. The versions this was last checked
-against are in the README's "Verified with" table.
+If `cat /proc/cmdline` inside the guest does not show the arguments you passed,
+you are almost certainly booting an image built before the `container` 1.2 bump:
+those set `CONFIG_CMDLINE_FORCE`, which makes the kernel ignore everything the
+runtime passes — including your `--kernel-arg` flags — and report its own baked
+string back. Rebuild from the current overlay (which no longer forces a command
+line), or check which image is installed with `container system` and re-run
+`scripts/install-kernel.sh`.
 
 ## `tar` fails extracting the kernel source
 

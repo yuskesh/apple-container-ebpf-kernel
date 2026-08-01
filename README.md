@@ -7,7 +7,7 @@ Apple `container` (and most off-the-shelf macOS Linux VMs) ship a kernel that is
 missing the pieces serious eBPF work needs — no BTF, no `sched_ext`, no
 `struct_ops` qdisc, sometimes no `kprobes`/`uprobes` at all. This repo is a small
 config overlay plus three scripts that build a stock Linux stable kernel
-(currently **7.1.3**, arm64) with all of that turned on, and install it into the
+(currently **7.1.5**, arm64) with all of that turned on, and install it into the
 `container` runtime.
 
 ## What you get
@@ -23,7 +23,8 @@ A kernel with, verified present:
 - **netem** packet impairment (`tc qdisc … netem loss/delay …`) for latency and
   loss testing, plus the common classful qdiscs and BPF/u32 classifiers.
 - The **BPF LSM** with `fmod_ret` error injection (so `SEC("lsm/<hook>")` and
-  `fmod_ret` programs actually fire — see the cmdline caveat below).
+  `fmod_ret` programs actually fire — the bpf LSM is activated per run with
+  `--kernel-arg`, see below).
 - **AF_XDP** socket maps (`XSKMAP`/`DEVMAP`) so `xsk_redirect` programs load.
 
 The exact set is in [`config/ebpf-overlay.conf`](config/ebpf-overlay.conf), which
@@ -33,9 +34,15 @@ is heavily commented with the rationale and the dependency gotchas.
 
 - Apple Silicon Mac. Upstream supports `container` on **macOS 26** and states it
   does not support older releases, so that is the floor here too.
-- [Apple `container`](https://github.com/apple/container) (`brew install container`).
-- ~15 GB free disk and a few minutes (a full build took **8 minutes** on an M1
-  Max with `-j9`; see [Verified with](#verified-with)).
+- [Apple `container`](https://github.com/apple/container) **1.2.0 or newer**
+  (`brew install container`). The bpf LSM is activated per run via
+  `--kernel-arg`, which was added in 1.2.0
+  ([apple/container#1744](https://github.com/apple/container/pull/1744)); on
+  older releases everything else in the kernel still works, but there is no way
+  to add `bpf` to the active LSM list short of force-baking the whole command
+  line into the image (what this repo did before the 1.2 bump — see the caveats).
+- ~15 GB free disk and a few minutes (a full build took **9 minutes** on an M1
+  Max with `-j8`; see [Verified with](#verified-with)).
 - The kernel itself is built **inside a Linux/arm64 build container**
   (`debian:trixie`); you do not need a cross-toolchain on the host.
 
@@ -53,10 +60,10 @@ container run -d --name kbuild --cap-add ALL -c 8 -m 8G \
 # 2. build the kernel (downloads the kernel source + kata config fragments,
 #    merges the overlay, builds arch/arm64/boot/Image)
 container exec kbuild /work/scripts/build-kernel.sh
-#    -> writes /work/output/Image-7.1.3-ebpf
+#    -> writes /work/output/Image-7.1.5-ebpf
 
 # 3. install it into the runtime (host side) and restart keeping the kernel
-./scripts/install-kernel.sh ./output/Image-7.1.3-ebpf
+./scripts/install-kernel.sh ./output/Image-7.1.5-ebpf
 container system start --disable-kernel-install
 
 # 4. verify the feature set on a throwaway container
@@ -66,8 +73,9 @@ container system start --disable-kernel-install
 Expected `verify-kernel.sh` output (abridged):
 
 ```
-uname:     7.1.3-ebpf
-BTF:       present (10877109 bytes)
+uname:     7.1.5-ebpf
+cmdline:   console=hvc0 tsc=reliable panic=0 lsm=lockdown,capability,landlock,yama,apparmor,bpf oops=panic init=/sbin/vminitd ro rootfstype=ext4 root=/dev/vda
+BTF:       present (10883894 bytes)
 sched_ext: present
 lsm:       capability,landlock,bpf
 struct_ops in BTF:
@@ -76,11 +84,16 @@ struct_ops in BTF:
   bpf_struct_ops_tcp_congestion_ops
 ```
 
+The `cmdline:` line is the runtime's real command line — nothing is baked into
+the image anymore — with the `lsm=` list replaced by the one passed via
+`--kernel-arg` (that is `verify-kernel.sh` doing it; note `bpf` at the end).
+
 The `lsm:` line lists the LSMs that are **actually active**, which is only ever a
 subset of the `lsm=` on the kernel command line — the kernel silently ignores any
 LSM that is not built in. `bpf` being present is the part that matters: it is the
-proof that the forced command line took effect. The exact rest of the list varies
-with the kata fragments you build against, so do not treat it as a fingerprint.
+proof that the `--kernel-arg lsm=` override took effect. The exact rest of the
+list varies with the kata fragments you build against, so do not treat it as a
+fingerprint.
 
 ## Running BPF programs
 
@@ -104,6 +117,22 @@ Or in an already-running container:
 container exec <container> /work/scripts/setup-bpf-env.sh
 # then load / attach your BPF programs as usual
 ```
+
+If the program uses the **BPF LSM** (`SEC("lsm/<hook>")`), additionally start the
+container with the bpf LSM active — it is off by default and per run:
+
+```sh
+container run --rm --cap-add ALL \
+  --kernel-arg lsm=lockdown,capability,landlock,yama,apparmor,bpf \
+  debian:trixie sh -c '/scripts/setup-bpf-env.sh && your-lsm-program'
+```
+
+Pass the **full list**: a user-supplied `lsm=` replaces the runtime default
+verbatim, so naming only `bpf` would silently drop `landlock`/`yama`/`apparmor`.
+Without the flag the container boots fine, but LSM programs attach and never
+fire — `setup-bpf-env.sh` prints a warning when it detects this. Only
+`SEC("lsm/…")` needs the flag; `fmod_ret`, kprobes, tracepoints, XDP and
+everything else work without it.
 
 The setup script mounts:
 
@@ -155,50 +184,43 @@ combination. It is not a compatibility claim for anything else.
 | Component | Version | How it was checked |
 |---|---|---|
 | macOS | 26.5.2 (25F84), Apple M1 Max | `sw_vers` |
-| Apple `container` | 1.1.0 | `container --version` |
-| `containerization` | 0.35.0 | exact pin of `container` 1.1.0 (`Package.resolved`) |
-| Linux kernel | 7.1.3 (`7.1.3-ebpf`) | built here, then `verify-kernel.sh` |
-| kata fragments | 3.32.0 | `KATA_TAG` default in `build-kernel.sh` |
-| Build | 8 min, `-j9`, 69 MB `Image` | `time make … Image` |
-| Date | 2026-07-15 | |
+| Apple `container` | 1.2.0 | `container --version` |
+| `containerization` | 0.40.1 | exact pin of `container` 1.2.0 (`Package.resolved`) |
+| Linux kernel | 7.1.5 (`7.1.5-ebpf`) | built here, then `verify-kernel.sh` |
+| kata fragments | 4.0.0 | `KATA_TAG` default in `build-kernel.sh` |
+| Build | 8m56s, `-j8`, 69 MB `Image` | `time make … Image` |
+| Date | 2026-08-02 | |
 
-**Why this table exists, and why it is not decoration.** The overlay sets
-`CONFIG_CMDLINE_FORCE` and bakes the runtime's *entire* kernel command line into
-the image (see the caveat below). That string is the one place this repo is
-coupled to a specific `container` release: if a future version boots with a
-different command line, the forced value goes stale and **the guest stops
-booting**. So the version of `container` this was verified against is load-bearing
-information, not trivia.
-
-On the combination above, the command line the runtime passes is:
+**Why this table exists.** Before the `container` 1.2 bump this repo force-baked
+the runtime's entire kernel command line into the image, and a runtime release
+that changed that line would have stopped the guest from booting — the table was
+the record of which release the baked string was read from. That coupling is
+gone: the image no longer forces a command line, and the bpf LSM rides on the
+`--kernel-arg` flag instead. What remains version-coupled is only that flag
+itself (`container` >= 1.2.0) and the runtime's *default* `lsm=` list, which the
+recommended override restates verbatim plus `,bpf`:
 
 ```
-console=hvc0 tsc=reliable panic=0 oops=panic lsm=lockdown,capability,landlock,yama,apparmor init=/sbin/vminitd ro rootfstype=ext4 root=/dev/vda
+lsm=lockdown,capability,landlock,yama,apparmor,bpf
 ```
 
-which is exactly `CONFIG_CMDLINE` in the overlay minus the `,bpf` this repo appends
-to `lsm=`. If you are on a newer `container`, re-check that line (see the caveat)
-before trusting this table.
+If a future `container` release changes its default LSM set, update the list in
+your `--kernel-arg` (and in `verify-kernel.sh`) to match — worst case is a
+missing LSM at runtime, not an unbootable guest.
 
 ## Important caveats
 
 - **The new kernel only affects new `container run` instances.** Existing
   containers snapshot their kernel when the runtime starts.
-- **The BPF LSM needs a forced kernel command line.** arm64 has no
-  `CMDLINE_EXTEND`, so to add `bpf` to the active `lsm=` list the overlay
-  `CONFIG_CMDLINE_FORCE`s the *entire* command line. That string must match what
-  your runtime actually boots with. **Verify it first**:
-  `container exec <some-container> cat /proc/cmdline`, then make
-  `CONFIG_CMDLINE` in the overlay match it exactly (only adding `,bpf`). A stale
-  forced command line will prevent the guest from booting. If you do not need the
-  BPF LSM, delete the two `CMDLINE` lines from the overlay.
-- **Read that command line from a kernel that is not already forcing one.** Once
-  you are running the kernel built here, `CONFIG_CMDLINE_FORCE` means the kernel
-  ignores what the runtime passed and reports `CONFIG_CMDLINE` right back at you —
-  so `cat /proc/cmdline` just echoes your own string and will "confirm" a value
-  that is already stale. Check it *before* you switch (on the stock kernel), or
-  temporarily point the runtime at a non-forcing kernel to re-read it after a
-  `container` upgrade.
+- **The BPF LSM is per-run and opt-in.** Runs without
+  `--kernel-arg lsm=…,bpf` boot fine, but `SEC("lsm/<hook>")` programs attach
+  and silently never fire. `setup-bpf-env.sh` warns when the bpf LSM is
+  inactive; `verify-kernel.sh` shows the active list.
+- **Images built before the 1.2 bump ignore `--kernel-arg`.** Those images were
+  built with `CONFIG_CMDLINE_FORCE`, which overrides whatever the runtime
+  passes — including your flags. If `verify-kernel.sh` shows a `cmdline:` that
+  does not contain the arguments you passed, you are booting one of those old
+  images; rebuild from this overlay.
 - See [`docs/troubleshooting.md`](docs/troubleshooting.md) for the BTF dependency
   chain and other traps.
 
@@ -217,7 +239,7 @@ fixes once the next stable line lands, so expect to bump `KVER` periodically
 rather than settling on it. Pick a longterm release instead if you want to sit
 still; the overlay does not care either way.
 
-The kata fragments are pinned separately via `KATA_TAG` (default `3.32.0`), and
+The kata fragments are pinned separately via `KATA_TAG` (default `4.0.0`), and
 `build-kernel.sh` also applies kata's dax patch from `patches/6.18.x/` if it still
 applies. Both are deliberately pinned rather than tracking `main`: the fragments
 decide what actually survives `olddefconfig`, so an unreviewed bump can silently
