@@ -31,6 +31,19 @@ else
   exit 1
 fi
 
+# Warn early when the bpf LSM is not active: SEC("lsm/<hook>") programs would
+# attach but never fire. Activation is per run and needs container >= 1.2.0:
+#   container run --kernel-arg lsm=lockdown,capability,landlock,yama,apparmor,bpf ...
+case ",$(cat /sys/kernel/security/lsm 2>/dev/null)," in
+  *,bpf,*)
+    echo "bpf lsm:    active"
+    ;;
+  *)
+    echo "bpf lsm:    NOT active — SEC(\"lsm/...\") programs will not fire" >&2
+    echo "            (re-run the container with --kernel-arg lsm=lockdown,capability,landlock,yama,apparmor,bpf)" >&2
+    ;;
+esac
+
 # bpffs — required for BPF map pinning (pinning to /sys/fs/bpf/...)
 if mountpoint -q /sys/fs/bpf 2>/dev/null; then
   echo "bpffs:      already mounted"
