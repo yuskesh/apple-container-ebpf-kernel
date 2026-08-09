@@ -64,6 +64,7 @@ container run --rm --cap-add SYS_ADMIN --kernel-arg "$LSM_ARG" "$IMAGE" sh -c '
       | sort -u | sed "s/^/  /" || echo "  (none found)"
   fi
 '
-echo ">>> netem needs CAP_NET_ADMIN; check it manually with:"
-echo "    container run --rm --cap-add NET_ADMIN $IMAGE sh -c 'tc qdisc add dev lo root netem loss 5% && tc qdisc del dev lo root && echo netem-ok'"
+echo ">>> netem needs CAP_NET_ADMIN; check it manually with (tc is not in the base"
+echo ">>> image, so iproute2 is installed first):"
+echo "    container run --rm --cap-add NET_ADMIN $IMAGE sh -c 'apt-get update -qq && apt-get install -y -qq iproute2 && tc qdisc add dev lo root netem loss 5% && tc qdisc del dev lo root && echo netem-ok'"
 echo ">>> If bpffs shows 'not mounted', run scripts/setup-bpf-env.sh inside the container first."
