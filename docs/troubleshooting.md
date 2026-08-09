@@ -107,10 +107,11 @@ Prefer `container system kernel set --binary <Image>` (a raw image) over the
 
 ```sh
 container run --rm --cap-add NET_ADMIN docker.io/library/debian:trixie sh -c \
-  'tc qdisc add dev lo root netem loss 5% && tc qdisc del dev lo root && echo netem-ok'
+  'apt-get update -qq && apt-get install -y -qq iproute2 &&
+   tc qdisc add dev lo root netem loss 5% && tc qdisc del dev lo root && echo netem-ok'
 ```
 
-(The container image also needs `iproute2` for `tc`.)
+(Stock `debian:trixie` does not ship `tc`, hence the `iproute2` install first.)
 
 ## `tracefs not found` (BPF tracepoint programs fail)
 

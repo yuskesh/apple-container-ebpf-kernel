@@ -77,6 +77,7 @@ uname:     7.1.5-ebpf
 cmdline:   console=hvc0 tsc=reliable panic=0 lsm=lockdown,capability,landlock,yama,apparmor,bpf oops=panic init=/sbin/vminitd ro rootfstype=ext4 root=/dev/vda
 BTF:       present (10883894 bytes)
 sched_ext: present
+bpffs:      present (not mounted — run setup-bpf-env.sh)
 lsm:       capability,landlock,bpf
 struct_ops in BTF:
   bpf_struct_ops_Qdisc_ops
