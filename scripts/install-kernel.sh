@@ -3,7 +3,7 @@
 #
 # Install a freshly built kernel into Apple `container`. Run on the macOS host.
 #
-#   scripts/install-kernel.sh /path/to/Image-7.1.5-ebpf
+#   scripts/install-kernel.sh /path/to/Image-7.1.8-ebpf
 #
 # Tunables:
 #   ARCH   target architecture (default arm64)
