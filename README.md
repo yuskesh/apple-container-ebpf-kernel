@@ -7,7 +7,7 @@ Apple `container` (and most off-the-shelf macOS Linux VMs) ship a kernel that is
 missing the pieces serious eBPF work needs — no BTF, no `sched_ext`, no
 `struct_ops` qdisc, sometimes no `kprobes`/`uprobes` at all. This repo is a small
 config overlay plus three scripts that build a stock Linux stable kernel
-(currently **7.1.5**, arm64) with all of that turned on, and install it into the
+(currently **7.1.8**, arm64) with all of that turned on, and install it into the
 `container` runtime.
 
 ## What you get
@@ -60,10 +60,10 @@ container run -d --name kbuild --cap-add ALL -c 8 -m 8G \
 # 2. build the kernel (downloads the kernel source + kata config fragments,
 #    merges the overlay, builds arch/arm64/boot/Image)
 container exec kbuild /work/scripts/build-kernel.sh
-#    -> writes /work/output/Image-7.1.5-ebpf
+#    -> writes /work/output/Image-7.1.8-ebpf
 
 # 3. install it into the runtime (host side) and restart keeping the kernel
-./scripts/install-kernel.sh ./output/Image-7.1.5-ebpf
+./scripts/install-kernel.sh ./output/Image-7.1.8-ebpf
 container system start --disable-kernel-install
 
 # 4. verify the feature set on a throwaway container
@@ -73,7 +73,7 @@ container system start --disable-kernel-install
 Expected `verify-kernel.sh` output (abridged):
 
 ```
-uname:     7.1.5-ebpf
+uname:     7.1.8-ebpf
 cmdline:   console=hvc0 tsc=reliable panic=0 lsm=lockdown,capability,landlock,yama,apparmor,bpf oops=panic init=/sbin/vminitd ro rootfstype=ext4 root=/dev/vda
 BTF:       present (10883894 bytes)
 sched_ext: present
@@ -184,9 +184,9 @@ combination. It is not a compatibility claim for anything else.
 | Component | Version | How it was checked |
 |---|---|---|
 | macOS | 26.5.2 (25F84), Apple M1 Max | `sw_vers` |
-| Apple `container` | 1.2.0 | `container --version` |
-| `containerization` | 0.40.1 | exact pin of `container` 1.2.0 (`Package.resolved`) |
-| Linux kernel | 7.1.5 (`7.1.5-ebpf`) | built here, then `verify-kernel.sh` |
+| Apple `container` | 1.2.2 | `container --version` |
+| `containerization` | 0.40.1 | exact pin of `container` 1.2.2 (`Package.resolved`) |
+| Linux kernel | 7.1.8 (`7.1.8-ebpf`) | built here, then `verify-kernel.sh` |
 | kata fragments | 4.0.0 | `KATA_TAG` default in `build-kernel.sh` |
 | Build | 8m56s, `-j8`, 69 MB `Image` | `time make … Image` |
 | Date | 2026-08-02 | |
