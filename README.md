@@ -41,8 +41,8 @@ is heavily commented with the rationale and the dependency gotchas.
   older releases everything else in the kernel still works, but there is no way
   to add `bpf` to the active LSM list short of force-baking the whole command
   line into the image (what this repo did before the 1.2 bump — see the caveats).
-- ~15 GB free disk and a few minutes (a full build took **9 minutes** on an M1
-  Max with `-j8`; see [Verified with](#verified-with)).
+- ~15 GB free disk and a few minutes (a full build took **6 minutes** on an M1
+  Max with `-j9`; see [Verified with](#verified-with)).
 - The kernel itself is built **inside a Linux/arm64 build container**
   (`debian:trixie`); you do not need a cross-toolchain on the host.
 
@@ -75,7 +75,7 @@ Expected `verify-kernel.sh` output (abridged):
 ```
 uname:     7.1.8-ebpf
 cmdline:   console=hvc0 tsc=reliable panic=0 lsm=lockdown,capability,landlock,yama,apparmor,bpf oops=panic init=/sbin/vminitd ro rootfstype=ext4 root=/dev/vda
-BTF:       present (10883894 bytes)
+BTF:       present (10884971 bytes)
 sched_ext: present
 bpffs:      present (not mounted — run setup-bpf-env.sh)
 lsm:       capability,landlock,bpf
@@ -184,13 +184,13 @@ combination. It is not a compatibility claim for anything else.
 
 | Component | Version | How it was checked |
 |---|---|---|
-| macOS | 26.5.2 (25F84), Apple M1 Max | `sw_vers` |
+| macOS | 26.6.1 (25G76), Apple M1 Max | `sw_vers` |
 | Apple `container` | 1.2.2 | `container --version` |
 | `containerization` | 0.40.1 | exact pin of `container` 1.2.2 (`Package.resolved`) |
 | Linux kernel | 7.1.8 (`7.1.8-ebpf`) | built here, then `verify-kernel.sh` |
 | kata fragments | 4.0.0 | `KATA_TAG` default in `build-kernel.sh` |
-| Build | 8m56s, `-j8`, 69 MB `Image` | `time make … Image` |
-| Date | 2026-08-02 | |
+| Build | 6m3s, `-j9`, 69 MB `Image` | `time make … Image` |
+| Date | 2026-08-12 | |
 
 **Why this table exists.** Before the `container` 1.2 bump this repo force-baked
 the runtime's entire kernel command line into the image, and a runtime release
