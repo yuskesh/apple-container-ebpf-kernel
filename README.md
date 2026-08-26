@@ -7,7 +7,7 @@ Apple `container` (and most off-the-shelf macOS Linux VMs) ship a kernel that is
 missing the pieces serious eBPF work needs — no BTF, no `sched_ext`, no
 `struct_ops` qdisc, sometimes no `kprobes`/`uprobes` at all. This repo is a small
 config overlay plus three scripts that build a stock Linux stable kernel
-(currently **7.1.8**, arm64) with all of that turned on, and install it into the
+(currently **7.1.10**, arm64) with all of that turned on, and install it into the
 `container` runtime.
 
 ## What you get
@@ -41,8 +41,8 @@ is heavily commented with the rationale and the dependency gotchas.
   older releases everything else in the kernel still works, but there is no way
   to add `bpf` to the active LSM list short of force-baking the whole command
   line into the image (what this repo did before the 1.2 bump — see the caveats).
-- ~15 GB free disk and a few minutes (a full build took **6 minutes** on an M1
-  Max with `-j9`; see [Verified with](#verified-with)).
+- ~15 GB free disk and a few minutes (a full build took **7 minutes** on an M1
+  Max with `-j10`; see [Verified with](#verified-with)).
 - The kernel itself is built **inside a Linux/arm64 build container**
   (`debian:trixie`); you do not need a cross-toolchain on the host.
 
@@ -60,10 +60,10 @@ container run -d --name kbuild --cap-add ALL -c 8 -m 8G \
 # 2. build the kernel (downloads the kernel source + kata config fragments,
 #    merges the overlay, builds arch/arm64/boot/Image)
 container exec kbuild /work/scripts/build-kernel.sh
-#    -> writes /work/output/Image-7.1.8-ebpf
+#    -> writes /work/output/Image-7.1.10-ebpf
 
 # 3. install it into the runtime (host side) and restart keeping the kernel
-./scripts/install-kernel.sh ./output/Image-7.1.8-ebpf
+./scripts/install-kernel.sh ./output/Image-7.1.10-ebpf
 container system start --disable-kernel-install
 
 # 4. verify the feature set on a throwaway container
@@ -73,9 +73,9 @@ container system start --disable-kernel-install
 Expected `verify-kernel.sh` output (abridged):
 
 ```
-uname:     7.1.8-ebpf
+uname:     7.1.10-ebpf
 cmdline:   console=hvc0 tsc=reliable panic=0 lsm=lockdown,capability,landlock,yama,apparmor,bpf oops=panic init=/sbin/vminitd ro rootfstype=ext4 root=/dev/vda
-BTF:       present (10884971 bytes)
+BTF:       present (10886539 bytes)
 sched_ext: present
 bpffs:      present (not mounted — run setup-bpf-env.sh)
 lsm:       capability,landlock,bpf
@@ -185,12 +185,12 @@ combination. It is not a compatibility claim for anything else.
 | Component | Version | How it was checked |
 |---|---|---|
 | macOS | 26.6.1 (25G76), Apple M1 Max | `sw_vers` |
-| Apple `container` | 1.2.2 | `container --version` |
-| `containerization` | 0.40.1 | exact pin of `container` 1.2.2 (`Package.resolved`) |
-| Linux kernel | 7.1.8 (`7.1.8-ebpf`) | built here, then `verify-kernel.sh` |
-| kata fragments | 4.0.0 | `KATA_TAG` default in `build-kernel.sh` |
-| Build | 6m3s, `-j9`, 69 MB `Image` | `time make … Image` |
-| Date | 2026-08-12 | |
+| Apple `container` | 1.3.0 | `container --version` |
+| `containerization` | 0.41.0 | exact pin of `container` 1.3.0 (`Package.resolved`) |
+| Linux kernel | 7.1.10 (`7.1.10-ebpf`) | built here, then `verify-kernel.sh` |
+| kata fragments | 4.1.0 | `KATA_TAG` default in `build-kernel.sh` |
+| Build | 7m11s, `-j10`, 69 MB `Image` | `time make … Image` |
+| Date | 2026-08-27 | |
 
 **Why this table exists.** Before the `container` 1.2 bump this repo force-baked
 the runtime's entire kernel command line into the image, and a runtime release
@@ -240,7 +240,7 @@ fixes once the next stable line lands, so expect to bump `KVER` periodically
 rather than settling on it. Pick a longterm release instead if you want to sit
 still; the overlay does not care either way.
 
-The kata fragments are pinned separately via `KATA_TAG` (default `4.0.0`), and
+The kata fragments are pinned separately via `KATA_TAG` (default `4.1.0`), and
 `build-kernel.sh` also applies kata's dax patch from `patches/6.18.x/` if it still
 applies. Both are deliberately pinned rather than tracking `main`: the fragments
 decide what actually survives `olddefconfig`, so an unreviewed bump can silently
