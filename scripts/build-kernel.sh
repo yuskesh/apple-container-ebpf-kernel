@@ -13,7 +13,7 @@
 # scripts/install-kernel.sh there.
 #
 # Tunables (environment variables):
-#   KVER         linux stable version to build           (default 7.1.10)
+#   KVER         linux stable version to build           (default 7.1.12)
 #   KATA_TAG     kata-containers tag for config fragments (default 4.1.0)
 #   JOBS         parallel make jobs                       (default: nproc)
 #   SRC          build directory (container FS, NOT a bind mount) (default /root/build)
@@ -22,7 +22,7 @@
 #   LOCALVERSION uname -r suffix                          (default -ebpf)
 set -euo pipefail
 
-KVER="${KVER:-7.1.10}"
+KVER="${KVER:-7.1.12}"
 KATA_TAG="${KATA_TAG:-4.1.0}"
 JOBS="${JOBS:-$(nproc)}"
 SRC="${SRC:-/root/build}"

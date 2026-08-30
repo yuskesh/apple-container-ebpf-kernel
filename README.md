@@ -7,7 +7,7 @@ Apple `container` (and most off-the-shelf macOS Linux VMs) ship a kernel that is
 missing the pieces serious eBPF work needs — no BTF, no `sched_ext`, no
 `struct_ops` qdisc, sometimes no `kprobes`/`uprobes` at all. This repo is a small
 config overlay plus three scripts that build a stock Linux stable kernel
-(currently **7.1.10**, arm64) with all of that turned on, and install it into the
+(currently **7.1.12**, arm64) with all of that turned on, and install it into the
 `container` runtime.
 
 ## What you get
@@ -41,7 +41,7 @@ is heavily commented with the rationale and the dependency gotchas.
   older releases everything else in the kernel still works, but there is no way
   to add `bpf` to the active LSM list short of force-baking the whole command
   line into the image (what this repo did before the 1.2 bump — see the caveats).
-- ~15 GB free disk and a few minutes (a full build took **7 minutes** on an M1
+- ~15 GB free disk and a few minutes (a full build took **6 minutes** on an M1
   Max with `-j10`; see [Verified with](#verified-with)).
 - The kernel itself is built **inside a Linux/arm64 build container**
   (`debian:trixie`); you do not need a cross-toolchain on the host.
@@ -60,10 +60,10 @@ container run -d --name kbuild --cap-add ALL -c 8 -m 8G \
 # 2. build the kernel (downloads the kernel source + kata config fragments,
 #    merges the overlay, builds arch/arm64/boot/Image)
 container exec kbuild /work/scripts/build-kernel.sh
-#    -> writes /work/output/Image-7.1.10-ebpf
+#    -> writes /work/output/Image-7.1.12-ebpf
 
 # 3. install it into the runtime (host side) and restart keeping the kernel
-./scripts/install-kernel.sh ./output/Image-7.1.10-ebpf
+./scripts/install-kernel.sh ./output/Image-7.1.12-ebpf
 container system start --disable-kernel-install
 
 # 4. verify the feature set on a throwaway container
@@ -73,9 +73,9 @@ container system start --disable-kernel-install
 Expected `verify-kernel.sh` output (abridged):
 
 ```
-uname:     7.1.10-ebpf
+uname:     7.1.12-ebpf
 cmdline:   console=hvc0 tsc=reliable panic=0 lsm=lockdown,capability,landlock,yama,apparmor,bpf oops=panic init=/sbin/vminitd ro rootfstype=ext4 root=/dev/vda
-BTF:       present (10886539 bytes)
+BTF:       present (10886696 bytes)
 sched_ext: present
 bpffs:      present (not mounted — run setup-bpf-env.sh)
 lsm:       capability,landlock,bpf
@@ -185,12 +185,12 @@ combination. It is not a compatibility claim for anything else.
 | Component | Version | How it was checked |
 |---|---|---|
 | macOS | 26.6.1 (25G76), Apple M1 Max | `sw_vers` |
-| Apple `container` | 1.3.0 | `container --version` |
-| `containerization` | 0.41.0 | exact pin of `container` 1.3.0 (`Package.resolved`) |
-| Linux kernel | 7.1.10 (`7.1.10-ebpf`) | built here, then `verify-kernel.sh` |
+| Apple `container` | 1.3.1 | `container --version` |
+| `containerization` | 0.42.0 | exact pin of `container` 1.3.1 (`Package.resolved`) |
+| Linux kernel | 7.1.12 (`7.1.12-ebpf`) | built here, then `verify-kernel.sh` |
 | kata fragments | 4.1.0 | `KATA_TAG` default in `build-kernel.sh` |
-| Build | 7m11s, `-j10`, 69 MB `Image` | `time make … Image` |
-| Date | 2026-08-27 | |
+| Build | 6m22s, `-j10`, 69 MB `Image` | `time make … Image` |
+| Date | 2026-08-31 | |
 
 **Why this table exists.** Before the `container` 1.2 bump this repo force-baked
 the runtime's entire kernel command line into the image, and a runtime release
