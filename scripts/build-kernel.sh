@@ -13,7 +13,7 @@
 # scripts/install-kernel.sh there.
 #
 # Tunables (environment variables):
-#   KVER         linux stable version to build           (default 7.1.12)
+#   KVER         linux stable version to build           (default 7.2.5)
 #   KATA_TAG     kata-containers tag for config fragments (default 4.1.0)
 #   JOBS         parallel make jobs                       (default: nproc)
 #   SRC          build directory (container FS, NOT a bind mount) (default /root/build)
@@ -22,7 +22,7 @@
 #   LOCALVERSION uname -r suffix                          (default -ebpf)
 set -euo pipefail
 
-KVER="${KVER:-7.1.12}"
+KVER="${KVER:-7.2.5}"
 KATA_TAG="${KATA_TAG:-4.1.0}"
 JOBS="${JOBS:-$(nproc)}"
 SRC="${SRC:-/root/build}"
@@ -67,8 +67,8 @@ frag_dir="$kata/tools/packaging/kernel/configs/fragments"
 
 cd "$ktree"
 
-# kata carries a dax fix that still applies cleanly on recent kernels (7.0.x /
-# 7.1.x, not yet upstream).
+# kata carries a dax fix that still applies cleanly on recent kernels (7.0.x -
+# 7.2.x, not yet upstream).
 dax="$kata/tools/packaging/kernel/patches/6.18.x/0001-fs-dax-check-zero-or-empty-entry-before-converting-xarray.patch"
 if [ -f "$dax" ] && patch -p1 --dry-run <"$dax" >/dev/null 2>&1; then
   patch -p1 <"$dax"
