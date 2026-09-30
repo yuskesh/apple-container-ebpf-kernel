@@ -7,7 +7,7 @@ Apple `container` (and most off-the-shelf macOS Linux VMs) ship a kernel that is
 missing the pieces serious eBPF work needs — no BTF, no `sched_ext`, no
 `struct_ops` qdisc, sometimes no `kprobes`/`uprobes` at all. This repo is a small
 config overlay plus three scripts that build a stock Linux stable kernel
-(currently **7.2.5**, arm64) with all of that turned on, and install it into the
+(currently **7.2.8**, arm64) with all of that turned on, and install it into the
 `container` runtime.
 
 ## What you get
@@ -60,10 +60,10 @@ container run -d --name kbuild --cap-add ALL -c 8 -m 8G \
 # 2. build the kernel (downloads the kernel source + kata config fragments,
 #    merges the overlay, builds arch/arm64/boot/Image)
 container exec kbuild /work/scripts/build-kernel.sh
-#    -> writes /work/output/Image-7.2.5-ebpf
+#    -> writes /work/output/Image-7.2.8-ebpf
 
 # 3. install it into the runtime (host side) and restart keeping the kernel
-./scripts/install-kernel.sh ./output/Image-7.2.5-ebpf
+./scripts/install-kernel.sh ./output/Image-7.2.8-ebpf
 container system start --disable-kernel-install
 
 # 4. verify the feature set on a throwaway container
@@ -73,9 +73,9 @@ container system start --disable-kernel-install
 Expected `verify-kernel.sh` output (abridged):
 
 ```
-uname:     7.2.5-ebpf
+uname:     7.2.8-ebpf
 cmdline:   console=hvc0 tsc=reliable panic=0 lsm=lockdown,capability,landlock,yama,apparmor,bpf oops=panic init=/sbin/vminitd ro rootfstype=ext4 root=/dev/vda
-BTF:       present (10411075 bytes)
+BTF:       present (10421886 bytes)
 sched_ext: present
 bpffs:      present (not mounted — run setup-bpf-env.sh)
 lsm:       capability,landlock,bpf
@@ -184,13 +184,13 @@ combination. It is not a compatibility claim for anything else.
 
 | Component | Version | How it was checked |
 |---|---|---|
-| macOS | 26.6.1 (25G76), Apple M1 Max | `sw_vers` |
-| Apple `container` | 1.4.1 | `container --version` |
-| `containerization` | 0.45.0 | exact pin of `container` 1.4.1 (`Package.resolved`) |
-| Linux kernel | 7.2.5 (`7.2.5-ebpf`) | built here, then `verify-kernel.sh` |
-| kata fragments | 4.1.0 | `KATA_TAG` default in `build-kernel.sh` |
-| Build | 6m55s, `-j10`, 67 MB `Image` | `time make … Image` |
-| Date | 2026-09-13 | |
+| macOS | 27.0.1 (26A434), Apple M1 Max | `sw_vers` |
+| Apple `container` | 1.5.0 | `container --version` |
+| `containerization` | 0.47.0 | exact pin of `container` 1.5.0 (`Package.resolved`) |
+| Linux kernel | 7.2.8 (`7.2.8-ebpf`) | built here, then `verify-kernel.sh` |
+| kata fragments | 4.2.0 | `KATA_TAG` default in `build-kernel.sh` |
+| Build | 7m18s, `-j10`, 67 MB `Image` | `time make … Image` |
+| Date | 2026-10-01 | |
 
 **Why this table exists.** Before the `container` 1.2 bump this repo force-baked
 the runtime's entire kernel command line into the image, and a runtime release
@@ -247,12 +247,13 @@ fixes once the next stable line lands (7.1.x went end-of-life with 7.1.13), so
 expect to bump `KVER` periodically rather than settling on it. Pick a longterm
 release instead if you want to sit still; the overlay does not care either way.
 
-The kata fragments are pinned separately via `KATA_TAG` (default `4.1.0`), and
-`build-kernel.sh` also applies kata's dax patch from `patches/6.18.x/` if it still
-applies. Both are deliberately pinned rather than tracking `main`: the fragments
-decide what actually survives `olddefconfig`, so an unreviewed bump can silently
-drop an eBPF option. The build asserts the essentials either way and fails loudly
-if one goes missing.
+The kata fragments are pinned separately via `KATA_TAG` (default `4.2.0`), and
+`build-kernel.sh` also applies kata's dax patch from `patches/6.18.x/` on kernels
+that lack it (the fix was backported to 7.2.8, where the build logs "already in"
+instead of applying it). Both are deliberately pinned rather than tracking
+`main`: the fragments decide what actually survives `olddefconfig`, so an
+unreviewed bump can silently drop an eBPF option. The build asserts the
+essentials either way and fails loudly if one goes missing.
 
 ## License
 

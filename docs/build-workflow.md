@@ -31,8 +31,8 @@ apt-get install -y --no-install-recommends \
 
 ```sh
 mkdir -p /root/build && cd /root/build
-wget https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.2.5.tar.xz
-tar -xf linux-7.2.5.tar.xz
+wget https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.2.8.tar.xz
+tar -xf linux-7.2.8.tar.xz
 ```
 
 Extract inside the container filesystem (`/root/build`), **not** on the
@@ -47,16 +47,18 @@ root, etc.). A sparse checkout pulls only the kernel packaging directory:
 
 ```sh
 cd /root/build
-git clone --depth 1 --branch 4.1.0 --filter=blob:none --sparse \
+git clone --depth 1 --branch 4.2.0 --filter=blob:none --sparse \
   https://github.com/kata-containers/kata-containers kata
 git -C kata sparse-checkout set tools/packaging/kernel
 ```
 
-kata also carries a small dax fix that still applies cleanly to recent kernels
-(7.0.x – 7.2.x, not yet upstream). Apply it if it applies:
+kata also carries a small dax fix for kernels that predate it. It went upstream
+as `8e2b8614` and was backported to **7.2.8**, so on 7.2.8 and later the forward
+dry-run fails because the fix is already there (a reverse dry-run succeeds). On
+7.0.x – 7.2.7, apply it:
 
 ```sh
-cd /root/build/linux-7.2.5
+cd /root/build/linux-7.2.8
 patch -p1 --dry-run < /root/build/kata/tools/packaging/kernel/patches/6.18.x/0001-fs-dax-check-zero-or-empty-entry-before-converting-xarray.patch \
   && patch -p1 < /root/build/kata/tools/packaging/kernel/patches/6.18.x/0001-fs-dax-check-zero-or-empty-entry-before-converting-xarray.patch
 ```
@@ -97,7 +99,7 @@ see [troubleshooting.md](troubleshooting.md).
 ```sh
 : > .scmversion                      # suppress the auto "+" suffix on a tarball
 time make ARCH=arm64 LOCALVERSION=-ebpf -j8 Image
-cp arch/arm64/boot/Image /work/output/Image-7.2.5-ebpf
+cp arch/arm64/boot/Image /work/output/Image-7.2.8-ebpf
 ```
 
 A full build took 9 minutes on an M1 Max with `-j8`. The image is larger than a
@@ -106,7 +108,7 @@ stock VM kernel (67 MB) because it carries debug info and BTF.
 ## 8. Install and restart (host)
 
 ```sh
-container system kernel set --binary ./output/Image-7.2.5-ebpf --arch arm64 --force
+container system kernel set --binary ./output/Image-7.2.8-ebpf --arch arm64 --force
 container system start --disable-kernel-install
 ```
 
@@ -116,7 +118,7 @@ official one. The new kernel applies to **new** `container run` instances only.
 ## 9. Verify
 
 ```sh
-container run --rm docker.io/library/alpine:3.24 uname -r          # -> 7.2.5-ebpf
+container run --rm docker.io/library/alpine:3.24 uname -r          # -> 7.2.8-ebpf
 container run --rm docker.io/library/alpine:3.24 sh -c \
   'ls /sys/kernel/btf/vmlinux && ls -d /sys/kernel/sched_ext/'
 ```

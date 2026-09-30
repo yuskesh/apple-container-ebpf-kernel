@@ -13,8 +13,8 @@
 # scripts/install-kernel.sh there.
 #
 # Tunables (environment variables):
-#   KVER         linux stable version to build           (default 7.2.5)
-#   KATA_TAG     kata-containers tag for config fragments (default 4.1.0)
+#   KVER         linux stable version to build           (default 7.2.8)
+#   KATA_TAG     kata-containers tag for config fragments (default 4.2.0)
 #   JOBS         parallel make jobs                       (default: nproc)
 #   SRC          build directory (container FS, NOT a bind mount) (default /root/build)
 #   OUT          where to drop the finished Image         (default /work/output)
@@ -22,8 +22,8 @@
 #   LOCALVERSION uname -r suffix                          (default -ebpf)
 set -euo pipefail
 
-KVER="${KVER:-7.2.5}"
-KATA_TAG="${KATA_TAG:-4.1.0}"
+KVER="${KVER:-7.2.8}"
+KATA_TAG="${KATA_TAG:-4.2.0}"
 JOBS="${JOBS:-$(nproc)}"
 SRC="${SRC:-/root/build}"
 OUT="${OUT:-/work/output}"
@@ -67,12 +67,19 @@ frag_dir="$kata/tools/packaging/kernel/configs/fragments"
 
 cd "$ktree"
 
-# kata carries a dax fix that still applies cleanly on recent kernels (7.0.x -
-# 7.2.x, not yet upstream).
+# kata carries a dax fix for kernels that predate it (7.0.x - 7.2.7). It landed
+# upstream as 8e2b8614 and was backported to 7.2.8, so on newer trees it is
+# already present; say which case this is rather than skipping silently.
 dax="$kata/tools/packaging/kernel/patches/6.18.x/0001-fs-dax-check-zero-or-empty-entry-before-converting-xarray.patch"
-if [ -f "$dax" ] && patch -p1 --dry-run <"$dax" >/dev/null 2>&1; then
-  patch -p1 <"$dax"
-  echo ">>> applied kata dax patch"
+if [ -f "$dax" ]; then
+  if patch -p1 --dry-run <"$dax" >/dev/null 2>&1; then
+    patch -p1 <"$dax"
+    echo ">>> applied kata dax patch"
+  elif patch -p1 -R --dry-run <"$dax" >/dev/null 2>&1; then
+    echo ">>> kata dax patch already in $KVER, skipped"
+  else
+    echo ">>> kata dax patch neither applies nor is present, skipped"
+  fi
 fi
 
 # 4. Config: arm64 defconfig + kata common + kata arm64 + our eBPF overlay.
