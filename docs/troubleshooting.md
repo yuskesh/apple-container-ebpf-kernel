@@ -139,3 +139,30 @@ container exec <container> /work/scripts/setup-bpf-env.sh
 The script mounts `tracefs` at `/sys/kernel/tracing`, `securityfs` at
 `/sys/kernel/security`, and `bpf` at `/sys/fs/bpf`. You need at minimum
 `--cap-add SYS_ADMIN` (or `--cap-add ALL`) for the mounts to succeed.
+
+## `container run` hangs after switching from Homebrew to the release `.pkg`
+
+**Symptom:** after `brew uninstall container` and installing the signed
+`.pkg` from the GitHub release, `container run` (and even `container system
+stop`) hangs with no output. `container system status` shows the new
+`client.version` but no `server.version`.
+
+**Root cause:** the runtime services are user LaunchAgents
+(`user/<uid>/com.apple.container.*`), and they keep running from the deleted
+Homebrew paths (`/opt/homebrew/Cellar/container/<old>/libexec/...`). The new
+client cannot talk to the old apiserver, so it cannot stop it either. Seen going
+from Homebrew 1.5.0 to the 1.6.0 `.pkg`.
+
+**Fix:** run `container system stop` *before* uninstalling the old version. If
+it is too late, boot the stale jobs out by hand and start the new runtime:
+
+```sh
+launchctl list | awk '/com\.apple\.container\./{print $3}' \
+  | while read -r j; do launchctl bootout "user/$(id -u)/$j"; done
+container system start --disable-kernel-install
+container system status   # server.version must now match client.version
+```
+
+Note the domain is `user/<uid>`, not `gui/<uid>` (`bootout gui/...` reports
+"No such process"). Booting out a `container-runtime-linux.<id>` job stops that
+container; `container start <id>` brings it back afterwards.
