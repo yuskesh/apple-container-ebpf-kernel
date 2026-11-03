@@ -7,7 +7,7 @@ Apple `container` (and most off-the-shelf macOS Linux VMs) ship a kernel that is
 missing the pieces serious eBPF work needs — no BTF, no `sched_ext`, no
 `struct_ops` qdisc, sometimes no `kprobes`/`uprobes` at all. This repo is a small
 config overlay plus three scripts that build a stock Linux stable kernel
-(currently **7.2.13**, arm64) with all of that turned on, and install it into the
+(currently **7.3.1**, arm64) with all of that turned on, and install it into the
 `container` runtime.
 
 ## What you get
@@ -62,10 +62,10 @@ container run -d --name kbuild --cap-add ALL -c 8 -m 8G \
 # 2. build the kernel (downloads the kernel source + kata config fragments,
 #    merges the overlay, builds arch/arm64/boot/Image)
 container exec kbuild /work/scripts/build-kernel.sh
-#    -> writes /work/output/Image-7.2.13-ebpf
+#    -> writes /work/output/Image-7.3.1-ebpf
 
 # 3. install it into the runtime (host side) and restart keeping the kernel
-./scripts/install-kernel.sh ./output/Image-7.2.13-ebpf
+./scripts/install-kernel.sh ./output/Image-7.3.1-ebpf
 container system start --disable-kernel-install
 
 # 4. verify the feature set on a throwaway container
@@ -75,9 +75,9 @@ container system start --disable-kernel-install
 Expected `verify-kernel.sh` output (abridged):
 
 ```
-uname:     7.2.13-ebpf
+uname:     7.3.1-ebpf
 cmdline:   console=hvc0 tsc=reliable panic=0 lsm=lockdown,capability,landlock,yama,apparmor,bpf oops=panic init=/sbin/vminitd ro rootfstype=ext4 root=/dev/vda
-BTF:       present (10425952 bytes)
+BTF:       present (10524035 bytes)
 sched_ext: present
 bpffs:      present (not mounted — run setup-bpf-env.sh)
 lsm:       capability,landlock,bpf
@@ -189,10 +189,10 @@ combination. It is not a compatibility claim for anything else.
 | macOS | 27.0.1 (26A434), Apple M1 Max | `sw_vers` |
 | Apple `container` | 1.6.1 (release `.pkg`) | `container system status` (client and server) |
 | `containerization` | 0.53.0 | exact pin of `container` 1.6.1 (`Package.resolved`) |
-| Linux kernel | 7.2.13 (`7.2.13-ebpf`) | built here, then `verify-kernel.sh` |
+| Linux kernel | 7.3.1 (`7.3.1-ebpf`) | built here, then `verify-kernel.sh` |
 | kata fragments | 4.3.1 | `KATA_TAG` default in `build-kernel.sh` |
-| Build | 6m16s, `-j9`, 67 MB `Image` | `time make … Image` |
-| Date | 2026-10-31 | |
+| Build | 6m21s, `-j10`, 69 MB `Image` | `time make … Image` |
+| Date | 2026-11-03 | |
 
 **Why this table exists.** Before the `container` 1.2 bump this repo force-baked
 the runtime's entire kernel command line into the image, and a runtime release
@@ -232,20 +232,22 @@ missing LSM at runtime, not an unbootable guest.
 The overlay is version-independent. To build a newer stable release, pass `KVER`:
 
 ```sh
-container exec kbuild env KVER=7.3.1 /work/scripts/build-kernel.sh
+container exec kbuild env KVER=7.3.2 /work/scripts/build-kernel.sh
 ```
 
 Patch-level bumps reuse the same overlay via `olddefconfig` with no changes, and
-so did the 7.1 → 7.2 series bump. A series bump does bring a new arm64
+so did the 7.1 → 7.2 and 7.2 → 7.3 series bumps. A series bump does bring a new arm64
 `defconfig`, though, so the image and its BTF can change size for reasons that
 have nothing to do with eBPF: 7.2 turned a batch of physical NIC drivers from
 built-in into modules (which this build does not produce), and the BTF shrank
-from 10,886,696 to 10,411,075 bytes with every eBPF option still set. Diff
+from 10,886,696 to 10,411,075 bytes with every eBPF option still set. 7.3 mostly
+adds Qualcomm clock drivers and drops `CONFIG_PROC_SYSCTL` as a symbol (`/proc/sys`
+now comes with `SYSCTL` + `PROC_FS`); BTF grew to 10,524,035 bytes. Diff
 `/proc/config.gz` of the old kernel against the new `.config` before reading
 anything into a size change.
 
-Note that **7.2.x is a plain stable line, not a longterm one** — it stops getting
-fixes once the next stable line lands (7.1.x went end-of-life with 7.1.13), so
+Note that **7.3.x is a plain stable line, not a longterm one** — it stops getting
+fixes once the next stable line lands (7.2.x went end-of-life with 7.2.15), so
 expect to bump `KVER` periodically rather than settling on it. Pick a longterm
 release instead if you want to sit still; the overlay does not care either way.
 

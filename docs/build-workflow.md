@@ -31,8 +31,8 @@ apt-get install -y --no-install-recommends \
 
 ```sh
 mkdir -p /root/build && cd /root/build
-wget https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.2.13.tar.xz
-tar -xf linux-7.2.13.tar.xz
+wget https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.3.1.tar.xz
+tar -xf linux-7.3.1.tar.xz
 ```
 
 Extract inside the container filesystem (`/root/build`), **not** on the
@@ -99,16 +99,16 @@ see [troubleshooting.md](troubleshooting.md).
 ```sh
 : > .scmversion                      # suppress the auto "+" suffix on a tarball
 time make ARCH=arm64 LOCALVERSION=-ebpf -j8 Image
-cp arch/arm64/boot/Image /work/output/Image-7.2.13-ebpf
+cp arch/arm64/boot/Image /work/output/Image-7.3.1-ebpf
 ```
 
 A full build took 9 minutes on an M1 Max with `-j8`. The image is larger than a
-stock VM kernel (67 MB) because it carries debug info and BTF.
+stock VM kernel (69 MB) because it carries debug info and BTF.
 
 ## 8. Install and restart (host)
 
 ```sh
-container system kernel set --binary ./output/Image-7.2.13-ebpf --arch arm64 --force
+container system kernel set --binary ./output/Image-7.3.1-ebpf --arch arm64 --force
 container system start --disable-kernel-install
 ```
 
@@ -118,7 +118,7 @@ official one. The new kernel applies to **new** `container run` instances only.
 ## 9. Verify
 
 ```sh
-container run --rm docker.io/library/alpine:3.24 uname -r          # -> 7.2.13-ebpf
+container run --rm docker.io/library/alpine:3.24 uname -r          # -> 7.3.1-ebpf
 container run --rm docker.io/library/alpine:3.24 sh -c \
   'ls /sys/kernel/btf/vmlinux && ls -d /sys/kernel/sched_ext/'
 ```
