@@ -7,7 +7,7 @@ Apple `container` (and most off-the-shelf macOS Linux VMs) ship a kernel that is
 missing the pieces serious eBPF work needs — no BTF, no `sched_ext`, no
 `struct_ops` qdisc, sometimes no `kprobes`/`uprobes` at all. This repo is a small
 config overlay plus three scripts that build a stock Linux stable kernel
-(currently **7.3.1**, arm64) with all of that turned on, and install it into the
+(currently **7.3.3**, arm64) with all of that turned on, and install it into the
 `container` runtime.
 
 ## What you get
@@ -62,10 +62,10 @@ container run -d --name kbuild --cap-add ALL -c 8 -m 8G \
 # 2. build the kernel (downloads the kernel source + kata config fragments,
 #    merges the overlay, builds arch/arm64/boot/Image)
 container exec kbuild /work/scripts/build-kernel.sh
-#    -> writes /work/output/Image-7.3.1-ebpf
+#    -> writes /work/output/Image-7.3.3-ebpf
 
 # 3. install it into the runtime (host side) and restart keeping the kernel
-./scripts/install-kernel.sh ./output/Image-7.3.1-ebpf
+./scripts/install-kernel.sh ./output/Image-7.3.3-ebpf
 container system start --disable-kernel-install
 
 # 4. verify the feature set on a throwaway container
@@ -75,9 +75,9 @@ container system start --disable-kernel-install
 Expected `verify-kernel.sh` output (abridged):
 
 ```
-uname:     7.3.1-ebpf
+uname:     7.3.3-ebpf
 cmdline:   console=hvc0 tsc=reliable panic=0 lsm=lockdown,capability,landlock,yama,apparmor,bpf oops=panic init=/sbin/vminitd ro rootfstype=ext4 root=/dev/vda
-BTF:       present (10524035 bytes)
+BTF:       present (10525829 bytes)
 sched_ext: present
 bpffs:      present (not mounted — run setup-bpf-env.sh)
 lsm:       capability,landlock,bpf
@@ -186,13 +186,13 @@ combination. It is not a compatibility claim for anything else.
 
 | Component | Version | How it was checked |
 |---|---|---|
-| macOS | 27.0.1 (26A434), Apple M1 Max | `sw_vers` |
-| Apple `container` | 1.6.1 (release `.pkg`) | `container system status` (client and server) |
-| `containerization` | 0.53.0 | exact pin of `container` 1.6.1 (`Package.resolved`) |
-| Linux kernel | 7.3.1 (`7.3.1-ebpf`) | built here, then `verify-kernel.sh` |
+| macOS | 27.2 (26B123), Apple M1 Max | `sw_vers` |
+| Apple `container` | 1.7.1 (release `.pkg`) | `container system status` (client and server) |
+| `containerization` | 0.54.0 | exact pin of `container` 1.7.1 (`Package.resolved`) |
+| Linux kernel | 7.3.3 (`7.3.3-ebpf`) | built here, then `verify-kernel.sh` |
 | kata fragments | 4.3.1 | `KATA_TAG` default in `build-kernel.sh` |
-| Build | 6m21s, `-j10`, 69 MB `Image` | `time make … Image` |
-| Date | 2026-11-03 | |
+| Build | 6m30s, `-j10`, 69 MB `Image` | `time make … Image` |
+| Date | 2026-11-09 | |
 
 **Why this table exists.** Before the `container` 1.2 bump this repo force-baked
 the runtime's entire kernel command line into the image, and a runtime release
@@ -232,7 +232,7 @@ missing LSM at runtime, not an unbootable guest.
 The overlay is version-independent. To build a newer stable release, pass `KVER`:
 
 ```sh
-container exec kbuild env KVER=7.3.2 /work/scripts/build-kernel.sh
+container exec kbuild env KVER=7.3.4 /work/scripts/build-kernel.sh
 ```
 
 Patch-level bumps reuse the same overlay via `olddefconfig` with no changes, and
